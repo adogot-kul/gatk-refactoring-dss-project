@@ -139,9 +139,9 @@ public abstract class GATKSparkTool extends SparkCommandLineProgram {
     public boolean createOutputBamSplittingIndex = ConfigFactory.getInstance().getGATKConfig().createOutputBamIndex();
 
     @Argument(fullName = SPLITTING_INDEX_GRANULARITY,
-             doc = "Granularity to use when writing a splitting index, one entry will be put into the index every n reads where n is this granularity value. Smaller granularity results in a larger index with more available split points.",
-             optional = true, common = true,
-             minValue = 1)
+            doc = "Granularity to use when writing a splitting index, one entry will be put into the index every n reads where n is this granularity value. Smaller granularity results in a larger index with more available split points.",
+            optional = true, common = true,
+            minValue = 1)
     public long splittingIndexGranularity = SBIIndexWriter.DEFAULT_GRANULARITY;
 
     @Argument(fullName = StandardArgumentDefinitions.CREATE_OUTPUT_VARIANT_INDEX_LONG_NAME,
@@ -395,7 +395,7 @@ public abstract class GATKSparkTool extends SparkCommandLineProgram {
         long size = readInputs.keySet().stream().mapToLong(k -> BucketUtils.dirSize(k)).sum();
         final int targetPartitionSize = getTargetPartitionSize();
         return 1 + MathUtils.toIntExactOrThrow(size / targetPartitionSize,
-                                               () -> new GATKException("getRecommendedNumReducers overflowed, size=" + size + " targetPartitionSize=" + targetPartitionSize));
+                () -> new GATKException("getRecommendedNumReducers overflowed, size=" + size + " targetPartitionSize=" + targetPartitionSize));
     }
 
     /**

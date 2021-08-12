@@ -10,10 +10,8 @@ import org.broadinstitute.hellbender.cmdline.StandardArgumentDefinitions;
 import org.broadinstitute.hellbender.cmdline.programgroups.ExampleProgramGroup;
 import org.broadinstitute.hellbender.engine.*;
 import org.broadinstitute.hellbender.engine.spark.VariantWalkerContext;
-import org.broadinstitute.hellbender.utils.read.GATKRead;
 import org.broadinstitute.hellbender.engine.spark.VariantWalkerSpark;
-
-import java.io.PrintStream;
+import org.broadinstitute.hellbender.utils.read.GATKRead;
 
 /**
  * Example/toy program that shows how to implement the VariantWalker interface. Prints supplied variants
