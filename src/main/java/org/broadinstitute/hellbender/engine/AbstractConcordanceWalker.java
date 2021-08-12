@@ -225,7 +225,7 @@ public abstract class AbstractConcordanceWalker extends WalkerBase {
      * store a truth vc in case of a false negative, an eval vc in case of a false positive, or a concordance pair of
      * truth and eval in case of a true positive.
      */
-    protected static class TruthVersusEval implements Locatable {
+    public static class TruthVersusEval implements Locatable {
         private final Optional<VariantContext> truth;
         private final Optional<VariantContext> eval;
         private final ConcordanceState concordanceState;

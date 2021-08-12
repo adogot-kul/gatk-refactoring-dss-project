@@ -16,7 +16,6 @@ import org.broadinstitute.hellbender.tools.walkers.mutect.Mutect2Engine;
 import picard.cmdline.programgroups.VariantEvaluationProgramGroup;
 
 import java.util.*;
-import java.util.stream.Collectors;
 
 @CommandLineProgramProperties(
         summary = "UNSUPPORTED.  FOR EVALUATION ONLY. Merge M2 (eval) calls with MC3 (truth)",
@@ -90,7 +89,9 @@ public class MergeMutect2CallsWithMC3 extends AbstractConcordanceWalker {
                 .make();
         final List<Genotype> genotypes = new ArrayList<>(Arrays.asList(tumorGenotype));
 
-        switch (concordanceState) {
+        concordanceState.adder(this, truthVersusEval, genotypes);
+
+        /*switch (concordanceState) {
             case TRUE_POSITIVE: // variant present in MC3 and unfiltered in M2.  Add M2 to CENTERS field.
                 vcfWriter.add(makeVariantContextBuilderWithM2Center(truthVersusEval.getTruth()).genotypes(genotypes).make());
                 break;
@@ -112,11 +113,10 @@ public class MergeMutect2CallsWithMC3 extends AbstractConcordanceWalker {
                 break;
             default:
                 throw new IllegalStateException("Unexpected ConcordanceState: " + concordanceState.toString());
-        }
-
+        }*/
     }
 
-    private VariantContextBuilder makeVariantContextBuilderWithM2Center(final VariantContext mc3) {
+    protected VariantContextBuilder makeVariantContextBuilderWithM2Center(final VariantContext mc3) {
         final List<String> centers = mc3.hasAttribute(CENTERS_KEY) ?
                 mc3.getAttributeAsStringList(CENTERS_KEY, "") : new ArrayList<>();
         centers.add(M2_CENTER_NAME);
@@ -129,4 +129,26 @@ public class MergeMutect2CallsWithMC3 extends AbstractConcordanceWalker {
             vcfWriter.close();
         }
     }
+
+    // setter's and getter's
+
+    public VariantContextWriter getVcfWriter() {
+        return vcfWriter;
+    }
+
+    public void setVcfWriter(VariantContextWriter vcfWriter) {
+        this.vcfWriter = vcfWriter;
+    }
+    public static String getCentersKey() {
+        return CENTERS_KEY;
+    }
+
+    public static String getM2CenterName() {
+        return M2_CENTER_NAME;
+    }
+
+    public static String getM2FiltersKey() {
+        return M2_FILTERS_KEY;
+    }
+
 }

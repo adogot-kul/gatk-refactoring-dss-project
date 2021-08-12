@@ -13,7 +13,6 @@ import org.broadinstitute.hellbender.cmdline.programgroups.ExampleProgramGroup;
 import org.broadinstitute.hellbender.engine.*;
 import org.broadinstitute.hellbender.engine.spark.IntervalWalkerContext;
 import org.broadinstitute.hellbender.utils.SimpleInterval;
-import org.broadinstitute.hellbender.utils.read.GATKRead;
 import org.broadinstitute.hellbender.engine.spark.IntervalWalkerSpark;
 
 import java.io.PrintStream;
@@ -53,20 +52,7 @@ public final class ExampleIntervalWalkerSpark extends IntervalWalkerSpark {
             ReferenceContext referenceContext = context.getReferenceContext();
             FeatureContext featureContext = context.getFeatureContext();
 
-            StringBuilder sb = new StringBuilder();
-            sb.append(String.format("Current interval: " + interval));
-            sb.append("\n");
-
-            if ( referenceContext.hasBackingDataSource() ) {
-                sb.append(String.format("\tOverlapping reference bases: %s\n\n", new String(referenceContext.getBases())));
-            }
-
-            if ( readsContext.hasBackingDataSource() ) {
-                for ( final GATKRead read : readsContext) {
-                    sb.append(String.format("\tOverlapping read at %s:%d-%d\n", read.getContig(), read.getStart(), read.getEnd()));
-                }
-                sb.append("\n");
-            }
+            StringBuilder sb = intervalAndVariantToString("Current interval: " + interval, referenceContext, readsContext, featureContext);
 
             if ( featureContext.hasBackingDataSource() ) {
                 for ( final VariantContext variant : featureContext.getValues(auxiliaryVariants) ) {

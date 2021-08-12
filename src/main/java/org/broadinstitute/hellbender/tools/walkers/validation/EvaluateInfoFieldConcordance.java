@@ -2,6 +2,7 @@ package org.broadinstitute.hellbender.tools.walkers.validation;
 
 import java.nio.file.Paths;
 import java.io.IOException;
+import java.util.concurrent.Callable;
 
 import org.apache.commons.collections4.Predicate;
 
@@ -83,6 +84,7 @@ public class EvaluateInfoFieldConcordance extends AbstractConcordanceWalker {
     @Argument(fullName="epsilon", shortName="epsilon", doc="Difference tolerance", optional=true)
     protected double epsilon = 0.1;
 
+
     private int snpCount = 0;
     private int indelCount = 0;
 
@@ -105,29 +107,11 @@ public class EvaluateInfoFieldConcordance extends AbstractConcordanceWalker {
     @Override
     protected void apply(AbstractConcordanceWalker.TruthVersusEval truthVersusEval, ReadsContext readsContext, ReferenceContext refContext) {
         ConcordanceState concordanceState = truthVersusEval.getConcordance();
-        switch (concordanceState) {
-            case TRUE_POSITIVE: {
-                if(truthVersusEval.getEval().isSNP()){
-                    snpCount++;
-                } else if (truthVersusEval.getEval().isIndel()) {
-                    indelCount++;
-                }
-                this.infoDifference(truthVersusEval.getEval(), truthVersusEval.getTruth());
-                break;
-            }
-            case FALSE_POSITIVE:
-            case FALSE_NEGATIVE:
-            case FILTERED_TRUE_NEGATIVE:
-            case FILTERED_FALSE_NEGATIVE: {
-                break;
-            }
-            default: {
-                throw new IllegalStateException("Unexpected ConcordanceState: " + concordanceState.toString());
-            }
-        }
+        concordanceState.countInTP(this, truthVersusEval);
     }
 
-    private void infoDifference(final VariantContext eval, final VariantContext truth) {
+
+    protected void infoDifference(final VariantContext eval, final VariantContext truth) {
         if(eval.hasAttribute(this.evalInfoKey) && truth.hasAttribute(truthInfoKey)) {
             final double evalVal = Double.valueOf((String) eval.getAttribute(this.evalInfoKey));
             final double truthVal = Double.valueOf((String) truth.getAttribute(this.truthInfoKey));
@@ -186,6 +170,22 @@ public class EvaluateInfoFieldConcordance extends AbstractConcordanceWalker {
     @Override
     protected Predicate<VariantContext> makeEvalVariantFilter() {
         return vc -> !vc.isFiltered() && !vc.isSymbolicOrSV();
+    }
+
+    public int getSnpCount() {
+        return snpCount;
+    }
+
+    public void setSnpCount(int snpCount) {
+        this.snpCount = snpCount;
+    }
+
+    public int getIndelCount() {
+        return indelCount;
+    }
+
+    public void setIndelCount(int indelCount) {
+        this.indelCount = indelCount;
     }
 
 }

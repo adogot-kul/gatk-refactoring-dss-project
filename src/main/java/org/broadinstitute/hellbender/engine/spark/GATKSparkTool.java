@@ -17,10 +17,7 @@ import org.broadinstitute.hellbender.cmdline.GATKPlugin.GATKAnnotationPluginDesc
 import org.broadinstitute.hellbender.cmdline.GATKPlugin.GATKReadFilterPluginDescriptor;
 import org.broadinstitute.hellbender.cmdline.StandardArgumentDefinitions;
 import org.broadinstitute.hellbender.cmdline.argumentcollections.*;
-import org.broadinstitute.hellbender.engine.FeatureDataSource;
-import org.broadinstitute.hellbender.engine.FeatureManager;
-import org.broadinstitute.hellbender.engine.GATKTool;
-import org.broadinstitute.hellbender.engine.TraversalParameters;
+import org.broadinstitute.hellbender.engine.*;
 import org.broadinstitute.hellbender.engine.filters.ReadFilter;
 import org.broadinstitute.hellbender.engine.filters.WellformedReadFilter;
 import org.broadinstitute.hellbender.engine.spark.datasources.ReadsSparkSink;
@@ -28,7 +25,6 @@ import org.broadinstitute.hellbender.engine.spark.datasources.ReadsSparkSource;
 import org.broadinstitute.hellbender.engine.spark.datasources.ReferenceMultiSparkSource;
 import org.broadinstitute.hellbender.engine.spark.datasources.ReferenceWindowFunctions;
 import org.broadinstitute.hellbender.exceptions.GATKException;
-import org.broadinstitute.hellbender.engine.GATKPath;
 import org.broadinstitute.hellbender.exceptions.UserException;
 import org.broadinstitute.hellbender.tools.walkers.annotator.Annotation;
 import org.broadinstitute.hellbender.utils.*;
@@ -139,9 +135,9 @@ public abstract class GATKSparkTool extends SparkCommandLineProgram {
     public boolean createOutputBamSplittingIndex = ConfigFactory.getInstance().getGATKConfig().createOutputBamIndex();
 
     @Argument(fullName = SPLITTING_INDEX_GRANULARITY,
-             doc = "Granularity to use when writing a splitting index, one entry will be put into the index every n reads where n is this granularity value. Smaller granularity results in a larger index with more available split points.",
-             optional = true, common = true,
-             minValue = 1)
+            doc = "Granularity to use when writing a splitting index, one entry will be put into the index every n reads where n is this granularity value. Smaller granularity results in a larger index with more available split points.",
+            optional = true, common = true,
+            minValue = 1)
     public long splittingIndexGranularity = SBIIndexWriter.DEFAULT_GRANULARITY;
 
     @Argument(fullName = StandardArgumentDefinitions.CREATE_OUTPUT_VARIANT_INDEX_LONG_NAME,
@@ -395,7 +391,7 @@ public abstract class GATKSparkTool extends SparkCommandLineProgram {
         long size = readInputs.keySet().stream().mapToLong(k -> BucketUtils.dirSize(k)).sum();
         final int targetPartitionSize = getTargetPartitionSize();
         return 1 + MathUtils.toIntExactOrThrow(size / targetPartitionSize,
-                                               () -> new GATKException("getRecommendedNumReducers overflowed, size=" + size + " targetPartitionSize=" + targetPartitionSize));
+                () -> new GATKException("getRecommendedNumReducers overflowed, size=" + size + " targetPartitionSize=" + targetPartitionSize));
     }
 
     /**
@@ -734,4 +730,22 @@ public abstract class GATKSparkTool extends SparkCommandLineProgram {
      */
     protected abstract void runTool( JavaSparkContext ctx );
 
+    protected static StringBuilder intervalAndVariantToString(String str, ReferenceContext referenceContext, ReadsContext readsContext, FeatureContext featureContext) {
+
+        StringBuilder sb = new StringBuilder();
+        sb.append(str);
+        sb.append("\n");
+
+        if ( referenceContext.hasBackingDataSource() ) {
+            sb.append(String.format("\tOverlapping reference bases: %s\n\n", new String(referenceContext.getBases())));
+        }
+
+        if ( readsContext.hasBackingDataSource() ) {
+            for ( final GATKRead read : readsContext) {
+                sb.append(String.format("\tOverlapping read at %s:%d-%d\n", read.getContig(), read.getStart(), read.getEnd()));
+            }
+            sb.append("\n");
+        }
+        return sb;
+    }
 }
