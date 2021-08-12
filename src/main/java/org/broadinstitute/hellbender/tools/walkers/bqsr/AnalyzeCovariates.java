@@ -3,23 +3,23 @@ package org.broadinstitute.hellbender.tools.walkers.bqsr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.broadinstitute.barclay.argparser.Argument;
-import org.broadinstitute.barclay.argparser.CommandLineException;
 import org.broadinstitute.barclay.argparser.CommandLineProgramProperties;
 import org.broadinstitute.barclay.help.DocumentedFeature;
 import org.broadinstitute.hellbender.cmdline.CommandLineProgram;
 import org.broadinstitute.hellbender.cmdline.StandardArgumentDefinitions;
-import picard.cmdline.programgroups.DiagnosticsAndQCProgramGroup;
 import org.broadinstitute.hellbender.exceptions.UserException;
+import org.broadinstitute.hellbender.utils.io.IOUtils;
 import org.broadinstitute.hellbender.utils.recalibration.RecalUtils;
 import org.broadinstitute.hellbender.utils.recalibration.RecalibrationReport;
-import org.broadinstitute.hellbender.utils.Utils;
-import org.broadinstitute.hellbender.utils.io.IOUtils;
+import picard.cmdline.programgroups.DiagnosticsAndQCProgramGroup;
 
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
+
+import static org.broadinstitute.hellbender.tools.walkers.bqsr.Checkers.*;
 
 /**
  * Evaluate and compare base quality score recalibration tables
@@ -114,6 +114,7 @@ import java.util.Optional;
  *
  */
 @DocumentedFeature
+
 @CommandLineProgramProperties(
         summary = "Evaluate and compare base quality score recalibration (BQSR) tables",
         oneLineSummary = "Evaluate and compare base quality score recalibration (BQSR) tables",
@@ -217,98 +218,12 @@ public final class AnalyzeCovariates extends CommandLineProgram {
                     ", -" + BEFORE_ARG_SHORT_NAME + " or -" + AFTER_ARG_SHORT_NAME);
         }
 
-        checkOutputFile(PDF_ARG_SHORT_NAME,pdfFile);
-        checkOutputFile(CSV_ARG_SHORT_NAME, csvFile);
-        checkInputReportFileLMT(beforeFile,afterFile);
-        checkOutputRequested();
+        checkOutputFileOverall(PDF_ARG_SHORT_NAME,pdfFile);
+        checkOutputFileOverall(CSV_ARG_SHORT_NAME, csvFile);
+        checkInputReportFileLMT(beforeFile,afterFile, ignoreLastModificationTime);
+        checkOutputRequested(pdfFile, csvFile);
     }
 
-    /**
-     * Checks whether the last-modification-time of the inputs is consistent with their relative roles.
-     *
-     * This routine does not thrown an exception but may output a warning message if inconsistencies are spotted.
-     *
-     * @param beforeFile the before report file.
-     * @param afterFile  the after report file.
-     */
-    private void checkInputReportFileLMT(final File beforeFile, final File afterFile) {
-
-        if (ignoreLastModificationTime  || beforeFile == null || afterFile == null) {
-            return; // nothing to do here
-        } else if (beforeFile.lastModified() > afterFile.lastModified()) {
-            Utils.warnUser("Last modification timestamp for 'Before' and 'After'"
-                    + "recalibration reports are in the wrong order. Perhaps, have they been swapped?");
-        }
-    }
-
-    /**
-     * Checks that at least one output was requested.
-     *
-     * @throw UserException if no output was requested.
-     */
-    private void checkOutputRequested() {
-        if (pdfFile == null && csvFile == null) {
-            throw new UserException("you need to request at least one output:"
-                    + " the intermediate csv file (-" + CSV_ARG_SHORT_NAME + " FILE)"
-                    + " or the final plot file (-" + PDF_ARG_SHORT_NAME + " FILE).");
-        }
-    }
-
-    /**
-     * Checks the value provided to input file arguments.
-     *
-     * @throw UserException if there is any problem cause by or under the end user's control
-     *
-     * @param name command line argument short name.
-     * @param value the argument value.
-     */
-    private void checkInputReportFile(final String name,final File value) {
-        if (value == null) {
-            return;
-        } else if (!value.exists()) {
-            throw new CommandLineException.BadArgumentValue(name, "input report '" +
-                    value + "' does not exist or is unreachable");
-        } else if (!value.isFile()) {
-            throw new CommandLineException.BadArgumentValue(name, "input report '" +
-                    value + "' is not a regular file");
-        } else if (!value.canRead()) {
-            throw new CommandLineException.BadArgumentValue(name, "input report '" +
-                    value + "' cannot be read");
-        }
-    }
-
-    /**
-     * Checks the value provided for output arguments.
-     *
-     * @throw UserException if there is any problem cause by or under the end user's control
-     *
-     * @param name command line argument short name.
-     * @param value the argument value.
-     */
-    private void checkOutputFile(final String name, final File value) {
-        if (value == null) {
-            return;
-        }
-        if (value.exists() && !value.isFile()) {
-            throw new CommandLineException.BadArgumentValue(name, "the output file location '"
-                    + value + "' exists as not a file");
-        }
-        final File parent = value.getParentFile();
-        if (parent == null) {
-            return;
-        }
-        if (!parent.exists()) {
-            throw new CommandLineException.BadArgumentValue(name, "the output file parent directory '"
-                    + parent + "' does not exists or is unreachable");
-        } else if (!parent.isDirectory()) {
-            throw new CommandLineException.BadArgumentValue(name, "the output file parent directory '"
-                    + parent + "' is not a directory");
-        } else if (!parent.canWrite()) {
-            throw new CommandLineException.BadArgumentValue(name, "the output file parent directory '"
-                    + parent + "' cannot be written");
-        }
-
-    }
 
     /**
      * Generates the plots using the external R script.
@@ -329,6 +244,16 @@ public final class AnalyzeCovariates extends CommandLineProgram {
         RecalUtils.generatePlots(csvFile,exampleReportFile,plotsFile);
     }
 
+
+    /**
+     * Returns the plot output file
+     * @return might be <code>null</code> if the user has not indicated and output file.
+     */
+    private File resolvePlotFile() {
+        return pdfFile;
+    }
+
+
     @Override
     public Object doWork() {
         checkArgumentsValues();
@@ -340,14 +265,6 @@ public final class AnalyzeCovariates extends CommandLineProgram {
         final File plotFile = resolvePlotFile();
         generatePlots(csvFile, reportFiles, plotFile);
         return Optional.empty();
-    }
-
-    /**
-     * Returns the plot output file
-     * @return might be <code>null</code> if the user has not indicated and output file.
-     */
-    private File resolvePlotFile() {
-        return pdfFile;
     }
 
     /**
@@ -388,7 +305,7 @@ public final class AnalyzeCovariates extends CommandLineProgram {
                 throw new UserException.IncompatibleRecalibrationTableParameters("There are differences in relevant arguments of"
                         + " two or more input recalibration reports. Please make sure"
                         + " they have been created using the same recalibration parameters."
-                        + " " + String.join("// ", reportDifferencesStringArray(diffs)));
+                        + " " + String.join("// ", Checkers.reportDifferencesStringArray(diffs)));
             }
         }
     }
@@ -433,35 +350,6 @@ public final class AnalyzeCovariates extends CommandLineProgram {
     }
 
     /**
-     * Generates a flatter String array representation of recalibration argument differences.
-     * @param diffs the differences to represent.
-     *
-     * @return never <code>null</code>, an array of the same length as the size of the input <code>diffs</code>.
-     */
-    private String[] reportDifferencesStringArray(final Map<String, ? extends CharSequence> diffs) {
-        final String[] result = new String[diffs.size()];
-        int i = 0;
-        for (final Map.Entry<String, ? extends CharSequence> e : diffs.entrySet()) {
-            result[i++] = capitalize(e.getKey()) + ": " + e.getValue();
-        }
-        return result;
-    }
-
-    /**
-     * Returns the input string capitalizing the first letter.
-     *
-     * @param str the string to capitalize
-     * @return never <code>null</code>.
-     */
-    private String capitalize(final String str) {
-        if (str.isEmpty()) {
-            return str;
-        } else {
-            return Character.toUpperCase(str.charAt(0)) + str.substring(1);
-        }
-    }
-
-    /**
      * Returns the csv file to use.
      * <p/>
      * This is the the one specified by the user if any or a temporary file
@@ -473,7 +361,7 @@ public final class AnalyzeCovariates extends CommandLineProgram {
         if (csvFile != null)  {
             return csvFile;
         } else {
-            return IOUtils.createTempFile("AnalyzeCovariates", ".csv");
+            return IOUtils.createTempFile("BAnalyzeCovariates", ".csv");
         }
     }
 

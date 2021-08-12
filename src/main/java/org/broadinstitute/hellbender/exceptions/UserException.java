@@ -5,7 +5,7 @@ import htsjdk.samtools.SAMSequenceRecord;
 import htsjdk.tribble.Feature;
 import org.broadinstitute.hellbender.cmdline.StandardArgumentDefinitions;
 import org.broadinstitute.hellbender.engine.GATKPath;
-import org.broadinstitute.hellbender.tools.walkers.variantutils.ValidateVariants;
+import org.broadinstitute.hellbender.tools.walkers.variantutils.ValidationType;
 import org.broadinstitute.hellbender.utils.help.HelpConstants;
 import org.broadinstitute.hellbender.utils.io.IOUtils;
 import org.broadinstitute.hellbender.utils.read.GATKRead;
@@ -331,9 +331,9 @@ public class UserException extends RuntimeException {
     public static class FailsStrictValidation extends UserException {
         private static final long serialVersionUID = 0L;
 
-        public final ValidateVariants.ValidationType type;
+        public final ValidationType type;
 
-        public FailsStrictValidation(String f, ValidateVariants.ValidationType type, String message) {
+        public FailsStrictValidation(String f, ValidationType type, String message) {
             super(String.format("Input %s fails strict validation of type %s: %s", f, type, message));
             this.type = type;
         }

@@ -1,27 +1,26 @@
 package org.broadinstitute.hellbender.tools.walkers.variantutils;
 
-import htsjdk.samtools.SAMSequenceDictionary;
 import htsjdk.tribble.TribbleException;
 import htsjdk.variant.variantcontext.Allele;
 import htsjdk.variant.variantcontext.VariantContext;
 import htsjdk.variant.vcf.VCFConstants;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 import org.broadinstitute.barclay.argparser.Argument;
 import org.broadinstitute.barclay.argparser.ArgumentCollection;
 import org.broadinstitute.barclay.argparser.CommandLineProgramProperties;
 import org.broadinstitute.barclay.help.DocumentedFeature;
 import org.broadinstitute.hellbender.cmdline.argumentcollections.DbsnpArgumentCollection;
-import picard.cmdline.programgroups.VariantEvaluationProgramGroup;
 import org.broadinstitute.hellbender.engine.FeatureContext;
 import org.broadinstitute.hellbender.engine.ReadsContext;
 import org.broadinstitute.hellbender.engine.ReferenceContext;
 import org.broadinstitute.hellbender.engine.VariantWalker;
 import org.broadinstitute.hellbender.exceptions.UserException;
-import org.broadinstitute.hellbender.utils.*;
-import org.broadinstitute.hellbender.utils.variant.GATKVCFConstants;
+import org.broadinstitute.hellbender.utils.GenomeLocSortedSet;
+import org.broadinstitute.hellbender.utils.SimpleInterval;
+import picard.cmdline.programgroups.VariantEvaluationProgramGroup;
 
 import java.util.*;
+
+import static org.broadinstitute.hellbender.tools.walkers.variantutils.UtilityValidateVariants.calculateValidationTypesToApply;
 
 
 /**
@@ -97,57 +96,12 @@ import java.util.*;
         programGroup = VariantEvaluationProgramGroup.class
 )
 @DocumentedFeature
-public final class ValidateVariants extends VariantWalker {
-    static final Logger logger = LogManager.getLogger(ValidateVariants.class);
+public class ValidateVariants extends VariantWalker {
+
 
     public static final String GVCF_VALIDATE = "validate-GVCF";
     public static final String DO_NOT_VALIDATE_FILTERED_RECORDS = "do-not-validate-filtered-records";
 
-    public enum ValidationType {
-
-        /**
-         * Makes reference to all extra-strict tests listed below.
-         */
-        ALL,
-
-        /**
-         * Check whether the reported reference base in the VCF is the same as the corresponding base in the
-         * actual reference.
-         */
-        REF,
-
-        /**
-         * Checks whether the variant IDs exists, only relevant if the user indicates a DBSNP vcf file (see {@link #dbsnp}).
-         */
-        IDS,
-
-        /**
-         * Check whether all alternative alleles participate in a genotype call of at least on sample.
-         */
-        ALLELES,
-
-        /**
-         * Check that the AN and AC annotations are consistent with the number of calls, alleles and then number these
-         * are called across samples.
-         */
-        CHR_COUNTS;
-
-        /**
-         * Unmodifiable set of concrete validation types.
-         *
-         * <p>These are all types except {@link #ALL}.</p>
-         */
-        public static final Set<ValidationType> CONCRETE_TYPES;
-
-        static {
-            final Set<ValidationType> cts = new LinkedHashSet<>(values().length - 1);
-            for (final ValidationType v : values()) {
-                if (v != ALL)
-                    cts.add(v);
-            }
-            CONCRETE_TYPES = Collections.unmodifiableSet(cts);
-        }
-    }
 
     @ArgumentCollection
     DbsnpArgumentCollection dbsnp = new DbsnpArgumentCollection();
@@ -187,77 +141,35 @@ public final class ValidateVariants extends VariantWalker {
             mutex = DO_NOT_VALIDATE_FILTERED_RECORDS)
     Boolean VALIDATE_GVCF = false;
 
-    /**
-     * Contains final set of validation to apply.
-     */
-    private Collection<ValidationType> validationTypes;
 
-    private GenomeLocSortedSet genomeLocSortedSet;
+    protected GenomeLocSortedSet genomeLocSortedSet;
 
     // information to keep track of when validating a GVCF
-    private SimpleInterval previousInterval;
-    private int previousStart = -1;
+    protected SimpleInterval previousInterval;
+    protected int previousStart = -1;
     private String previousContig = null;
 
-    @Override
-    public void onTraversalStart() {
-        if (VALIDATE_GVCF) {
-            final SAMSequenceDictionary seqDictionary = getBestAvailableSequenceDictionary();
+    protected Collection<ValidationType> validationTypes;
 
-            if (seqDictionary == null)
-                throw new UserException("Validating a GVCF requires a sequence dictionary but no dictionary was able to be constructed from your input.");
-
-            genomeLocSortedSet = new GenomeLocSortedSet(new GenomeLocParser(seqDictionary));
-        }
-        validationTypes = calculateValidationTypesToApply(excludeTypes);
-
-        //warn user if certain requested validations cannot be done due to lack of arguments
-        if(dbsnp.dbsnp == null && (validationTypes.contains(ValidationType.ALL) || validationTypes.contains(ValidationType.IDS)))
-        {
-            logger.warn("IDS validation cannot be done because no DBSNP file was provided");
-            logger.warn("Other possible validations will still be performed");
-        }
-        if(!hasReference() && (validationTypes.contains(ValidationType.ALL) || validationTypes.contains(ValidationType.REF)))
-        {
-            logger.warn("REF validation cannot be done because no reference file was provided");
-            logger.warn("Other possible validations will still be performed");
-        }
-    }
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     @Override
     public void apply(final VariantContext vc, final ReadsContext readsContext, final ReferenceContext ref, final FeatureContext featureContext) {
         if (DO_NOT_VALIDATE_FILTERED && vc.isFiltered()) {
             return;
         }
-        // get the true reference allele
+        validateVariantsOrder(vc);
+        loopThroughCollectionForValidation(vc, ref, featureContext);
+    }
+
+    public void loopThroughCollectionForValidation(final VariantContext vc, final ReferenceContext ref, final FeatureContext featureContext) {
+
         final Allele reportedRefAllele = vc.getReference();
         final int refLength = reportedRefAllele.length();
 
         final Allele observedRefAllele = hasReference() ? Allele.create(Arrays.copyOf(ref.getBases(), refLength)) : null;
 
         final Set<String> rsIDs = getRSIDs(featureContext);
-
-        if (VALIDATE_GVCF) {
-            final SimpleInterval refInterval = ref.getInterval();
-
-            validateVariantsOrder(vc);
-
-            // GenomeLocSortedSet will automatically merge intervals that are overlapping when setting `mergeIfIntervalOverlaps`
-            // to true.  In a GVCF most blocks are adjacent to each other so they wouldn't normally get merged.  We check
-            // if the current record is adjacent to the previous record and "overlap" them if they are so our set is as
-            // small as possible while still containing the same bases.
-            final int start = (previousInterval != null && previousInterval.overlapsWithMargin(refInterval, 1)) ?
-                    previousInterval.getStart() : refInterval.getStart();
-            final int end = (previousInterval != null && previousInterval.overlapsWithMargin(refInterval, 1)) ?
-                    Math.max(previousInterval.getEnd(), vc.getEnd()) : vc.getEnd();
-            final GenomeLoc possiblyMergedGenomeLoc = genomeLocSortedSet.getGenomeLocParser().createGenomeLoc(refInterval.getContig(), start, end);
-            genomeLocSortedSet.add(possiblyMergedGenomeLoc, true);
-
-            previousInterval = new SimpleInterval(possiblyMergedGenomeLoc);
-            previousStart = vc.getStart();
-            validateGVCFVariant(vc);
-        }
-
         for (final ValidationType t : validationTypes) {
             try{
                 applyValidationType(vc, reportedRefAllele, observedRefAllele, rsIDs, t);
@@ -267,30 +179,7 @@ public final class ValidateVariants extends VariantWalker {
         }
     }
 
-    @Override
-    public Object onTraversalSuccess() {
-        if (VALIDATE_GVCF) {
-            final GenomeLocSortedSet intervalArgumentGenomeLocSortedSet;
-            final SAMSequenceDictionary seqDictionary = getBestAvailableSequenceDictionary();
-
-            if (intervalArgumentCollection.intervalsSpecified()){
-                intervalArgumentGenomeLocSortedSet = GenomeLocSortedSet.createSetFromList(genomeLocSortedSet.getGenomeLocParser(), IntervalUtils.genomeLocsFromLocatables(genomeLocSortedSet.getGenomeLocParser(), intervalArgumentCollection.getIntervals(seqDictionary)));
-            } else {
-                intervalArgumentGenomeLocSortedSet = GenomeLocSortedSet.createSetFromSequenceDictionary(seqDictionary);
-            }
-
-            final GenomeLocSortedSet uncoveredIntervals = intervalArgumentGenomeLocSortedSet.subtractRegions(genomeLocSortedSet);
-            if (uncoveredIntervals.coveredSize() > 0) {
-                final UserException e = new UserException("A GVCF must cover the entire region. Found " + uncoveredIntervals.coveredSize() +
-                        " loci with no VariantContext covering it. The first uncovered segment is:" +
-                        uncoveredIntervals.iterator().next());
-                throwOrWarn(e);
-            }
-        }
-        return null;
-    }
-
-    /*
+    /**
      *  Returns the list of RSIDs overlapping the current variant that we're walking over.
      *  If there's no RSID or if there was not dbsnp file passed in as an argument,
      *  an empty set is returned (and then no validation is performed, see applyValidationType.
@@ -301,44 +190,6 @@ public final class ValidateVariants extends VariantWalker {
             rsIDs.addAll(Arrays.asList(rsID.getID().split(VCFConstants.ID_FIELD_SEPARATOR)));
         }
         return rsIDs;
-    }
-
-    /**
-     * Given the validation type and exclusion type, calculate the final set of type to validate.
-     * @param excludeTypes types to exclude.
-     *
-     * @return the final set of type to validate. May be empty.
-     */
-    private Collection<ValidationType> calculateValidationTypesToApply(final List<ValidationType> excludeTypes) {
-
-        //creates local, temp list so that original list provided by user doesn't get modified
-        List<ValidationType> excludeTypesTemp = new ArrayList<>(excludeTypes);
-        if (VALIDATE_GVCF && !excludeTypesTemp.contains(ValidationType.ALLELES)) {
-            // Note: in a future version allele validation might be OK for GVCFs, if that happens
-            // this will be more complicated.
-            logger.warn("GVCF format is currently incompatible with allele validation. Not validating Alleles.");
-            excludeTypesTemp.add(ValidationType.ALLELES);
-        }
-        if (excludeTypesTemp.isEmpty()) {
-            return Collections.singleton(ValidationType.ALL);
-        }
-        final Set<ValidationType> excludeTypeSet = new LinkedHashSet<>(excludeTypesTemp);
-        if (excludeTypesTemp.size() != excludeTypeSet.size()) {
-            logger.warn("found repeat redundant validation types listed using the --validation-type-to-exclude argument");
-        }
-        if (excludeTypeSet.contains(ValidationType.ALL)) {
-            if (excludeTypeSet.size() > 1) {
-                logger.warn("found ALL in the --validation-type-to-exclude list together with other concrete type exclusions that are redundant");
-            }
-            return Collections.emptyList();
-        } else {
-            final Set<ValidationType> result = new LinkedHashSet<>(ValidationType.CONCRETE_TYPES);
-            result.removeAll(excludeTypeSet);
-            if (result.contains(ValidationType.REF) && !hasReference()) {
-                throw new UserException.MissingReference("Validation type " + ValidationType.REF.name() + " was selected but no reference was provided.", true);
-            }
-            return result;
-        }
     }
 
     private void validateVariantsOrder(final VariantContext vc) {
@@ -359,7 +210,7 @@ public final class ValidateVariants extends VariantWalker {
         }
     }
 
-    private void validateGVCFVariant(final VariantContext vc) {
+    protected void validateGVCFVariant(final VariantContext vc) {
         if (!vc.hasAllele(Allele.NON_REF_ALLELE)) {
             final UserException e = new UserException(String.format("In a GVCF all records must contain a %s allele. Offending record: %s",
                     Allele.NON_REF_STRING, vc.toStringWithoutGenotypes()));
@@ -370,55 +221,45 @@ public final class ValidateVariants extends VariantWalker {
     private void applyValidationType(VariantContext vc, Allele reportedRefAllele, Allele observedRefAllele, Set<String> rsIDs, ValidationType t) {
         // Note: VariantContext.validateRSIDs blows up on an empty list (but works fine with null).
         // The workaround is to not pass an empty list.
-        switch( t ) {
-            case ALL:
-                if(hasReference())
-                {
-                    if(!rsIDs.isEmpty())
-                    {
-                        vc.extraStrictValidation(reportedRefAllele, observedRefAllele, rsIDs);
-                    }
-                    else{
-                        vc.validateReferenceBases(reportedRefAllele, observedRefAllele);
-                        vc.validateAlternateAlleles();
-                        vc.validateChromosomeCounts();
-                    }
-                }
-                else{
-                    if (rsIDs.isEmpty())
-                    {
-                        vc.validateAlternateAlleles();
-                        vc.validateChromosomeCounts();
-                    }
-                    else{
-                        vc.validateAlternateAlleles();
-                        vc.validateChromosomeCounts();
-                        vc.validateRSIDs(rsIDs);
-                    }
-                }
-                break;
-            case REF:
-                vc.validateReferenceBases(reportedRefAllele, observedRefAllele);
-                break;
-            case IDS:
-                if (!rsIDs.isEmpty()) {
-                    vc.validateRSIDs(rsIDs);
-                }
-                break;
-            case ALLELES:
-                vc.validateAlternateAlleles();
-                break;
-            case CHR_COUNTS:
-                vc.validateChromosomeCounts();
-                break;
+
+        t.applyValidationTypeOnEnum(this, vc, reportedRefAllele, observedRefAllele, rsIDs);
+    }
+
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    public void onTraversalStart() {
+        validationTypes = calculateValidationTypesToApply( this);
+        lackofArgumentsWarnings();
+    }
+
+
+    public void lackofArgumentsWarnings() {
+        //warn user if certain requested validations cannot be done due to lack of arguments
+        if(dbsnp.dbsnp == null && (validationTypes.contains(ValidationType.ALL) || validationTypes.contains(ValidationType.IDS)))
+        {
+            logger.warn("IDS validation cannot be done because no DBSNP file was provided");
+            logger.warn("Other possible validations will still be performed");
+        }
+        if(!hasReference() && (validationTypes.contains(ValidationType.ALL) || validationTypes.contains(ValidationType.REF)))
+        {
+            logger.warn("REF validation cannot be done because no reference file was provided");
+            logger.warn("Other possible validations will still be performed");
         }
     }
 
-    private void throwOrWarn(UserException e) {
+
+    public Object onTraversalSuccess() {
+        return null;
+    }
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    protected void throwOrWarn(UserException e) {
         if (WARN_ON_ERROR) {
             logger.warn("***** " + e.getMessage() + " *****");
         } else {
             throw e;
         }
     }
+
 }

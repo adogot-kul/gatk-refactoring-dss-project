@@ -52,7 +52,7 @@ import org.broadinstitute.hellbender.utils.variant.GATKVariantContextUtils;
 public abstract class GATKTool extends CommandLineProgram {
 
     @ArgumentCollection
-    protected IntervalArgumentCollection intervalArgumentCollection = requiresIntervals() ? new RequiredIntervalArgumentCollection() : new OptionalIntervalArgumentCollection();
+    public IntervalArgumentCollection intervalArgumentCollection = requiresIntervals() ? new RequiredIntervalArgumentCollection() : new OptionalIntervalArgumentCollection();
 
     @ArgumentCollection
     protected final ReadInputArgumentCollection readArguments = requiresReads() ? new RequiredReadInputArgumentCollection() : new OptionalReadInputArgumentCollection();

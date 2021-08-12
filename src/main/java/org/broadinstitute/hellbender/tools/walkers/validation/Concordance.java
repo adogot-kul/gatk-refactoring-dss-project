@@ -52,7 +52,7 @@ import java.util.stream.Collectors;
  *   -R reference.fa \
  *   -eval eval.vcf \
  *   --truth truth.vcf \
- *   --summary summary.tsv    
+ *   --summary summary.tsv
  * </pre>
  *
  */
@@ -81,7 +81,7 @@ public class Concordance extends AbstractConcordanceWalker {
     public static final String TRUE_POSITIVES_AND_FALSE_POSITIVES_SHORT_NAME = "tpfp";
     public static final String FILTERED_TRUE_NEGATIVES_AND_FALSE_NEGATIVES_LONG_NAME = "filtered-true-negatives-and-false-negatives";
     public static final String FILTERED_TRUE_NEGATIVES_AND_FALSE_NEGATIVES_SHORT_NAME = "ftnfn";
-    
+
     public static final String TRUTH_STATUS_VCF_ATTRIBUTE = "STATUS";
     private static VCFInfoHeaderLine TRUTH_STATUS_HEADER_LINE =
             new VCFInfoHeaderLine(TRUTH_STATUS_VCF_ATTRIBUTE, 1,VCFHeaderLineType.String, "Truth status: TP/FP/FN for true positive/false positive/false negative.");
@@ -117,11 +117,12 @@ public class Concordance extends AbstractConcordanceWalker {
     // we count true positives, false positives, false negatives for snps and indels
     private final EnumMap<ConcordanceState, MutableLong> snpCounts = new EnumMap<>(ConcordanceState.class);
     private final EnumMap<ConcordanceState, MutableLong> indelCounts = new EnumMap<>(ConcordanceState.class);
+
     private VariantContextWriter truePositivesAndFalseNegativesVcfWriter;
     private VariantContextWriter truePositivesAndFalsePositivesVcfWriter;
     private VariantContextWriter filteredTrueNegativesAndFalseNegativesVcfWriter;
 
-    private final Map<String, FilterAnalysisRecord> filterAnalysisRecords = new HashMap<>();
+    protected final Map<String, FilterAnalysisRecord> filterAnalysisRecords = new HashMap<>();
 
     @Override
     public void onTraversalStart() {
@@ -169,35 +170,10 @@ public class Concordance extends AbstractConcordanceWalker {
         } else {
             indelCounts.get(concordanceState).increment();
         }
-
-        switch (concordanceState) {
-            case TRUE_POSITIVE:
-                writeTruePositive(truthVersusEval);
-                break;
-            case FALSE_POSITIVE:
-                writeFalsePositive(truthVersusEval);
-                break;
-            case FALSE_NEGATIVE:
-                writeFalseNegative(truthVersusEval);
-                break;
-            case FILTERED_TRUE_NEGATIVE:
-                writeFilteredTrueNegative(truthVersusEval);
-                break;
-            case FILTERED_FALSE_NEGATIVE:
-                writeFilteredFalseNegative(truthVersusEval);
-                break;
-            default:
-                throw new IllegalStateException("Unexpected ConcordanceState: " + concordanceState.toString());
-        }
-
-        if (filterAnalysis != null && concordanceState == ConcordanceState.FILTERED_TRUE_NEGATIVE || concordanceState == ConcordanceState.FILTERED_FALSE_NEGATIVE) {
-            final Set<String> filters = truthVersusEval.getEval().getFilters();
-            final boolean unique = filters.size() == 1;
-            filters.stream().map(filterAnalysisRecords::get).forEach(record -> updateFilterAnalysisRecord(record, concordanceState, unique));
-        }
+        concordanceState.writeInVCF(this, truthVersusEval);
     }
 
-    private void updateFilterAnalysisRecord(final FilterAnalysisRecord record, final ConcordanceState state, final boolean isOnlyFilter) {
+    protected void updateFilterAnalysisRecord(final FilterAnalysisRecord record, final ConcordanceState state, final boolean isOnlyFilter) {
         if (state == ConcordanceState.FILTERED_TRUE_NEGATIVE) {
             record.incrementTrueNegative();
             if (isOnlyFilter) {
@@ -213,39 +189,7 @@ public class Concordance extends AbstractConcordanceWalker {
         }
     }
 
-    private void writeTruePositive(final TruthVersusEval truthVersusEval) {
-        final ConcordanceState state = truthVersusEval.getConcordance();
-        Utils.validateArg(state == ConcordanceState.TRUE_POSITIVE, "This is not a true positive.");
-        tryToWrite(truePositivesAndFalseNegativesVcfWriter, annotateWithConcordanceState(truthVersusEval.getTruth(), state));
-        tryToWrite(truePositivesAndFalsePositivesVcfWriter, annotateWithConcordanceState(truthVersusEval.getEval(), state));
-    }
-
-    private void writeFalsePositive(final TruthVersusEval truthVersusEval) {
-        final ConcordanceState state = truthVersusEval.getConcordance();
-        Utils.validateArg(state == ConcordanceState.FALSE_POSITIVE, "This is not a false positive.");
-        tryToWrite(truePositivesAndFalsePositivesVcfWriter, annotateWithConcordanceState(truthVersusEval.getEval(), state));
-    }
-
-    private void writeFalseNegative(final TruthVersusEval truthVersusEval) {
-        final ConcordanceState state = truthVersusEval.getConcordance();
-        Utils.validateArg(state == ConcordanceState.FALSE_NEGATIVE, "This is not a false negative.");
-        tryToWrite(truePositivesAndFalseNegativesVcfWriter, annotateWithConcordanceState(truthVersusEval.getTruth(), state));
-    }
-
-    private void writeFilteredFalseNegative(final TruthVersusEval truthVersusEval) {
-        final ConcordanceState state = truthVersusEval.getConcordance();
-        Utils.validateArg(state == ConcordanceState.FILTERED_FALSE_NEGATIVE, "This is not a filtered false negative.");
-        tryToWrite(truePositivesAndFalseNegativesVcfWriter, annotateWithConcordanceState(truthVersusEval.getTruth(), state));
-        tryToWrite(filteredTrueNegativesAndFalseNegativesVcfWriter, annotateWithConcordanceState(truthVersusEval.getEval(), state));
-    }
-
-    private void writeFilteredTrueNegative(final TruthVersusEval truthVersusEval) {
-        final ConcordanceState state = truthVersusEval.getConcordance();
-        Utils.validateArg(state == ConcordanceState.FILTERED_TRUE_NEGATIVE, "This is not a filtered true negative.");
-        tryToWrite(filteredTrueNegativesAndFalseNegativesVcfWriter, annotateWithConcordanceState(truthVersusEval.getEval(), state));
-    }
-
-    private static void tryToWrite(final VariantContextWriter writer, final VariantContext vc) {
+    protected static void tryToWrite(final VariantContextWriter writer, final VariantContext vc) {
         if (writer != null) {
             writer.add(vc);
         }
@@ -293,8 +237,8 @@ public class Concordance extends AbstractConcordanceWalker {
         // If it does, we pick the first for comparison:
         final boolean containsAltAllele =
                 (truth.getAlternateAlleles().size() == eval.getAlternateAlleles().size()) &&
-                ((truth.getAlternateAlleles().size() > 0) &&
-                        eval.getAlternateAlleles().contains(truth.getAlternateAllele(0)));
+                        ((truth.getAlternateAlleles().size() > 0) &&
+                                eval.getAlternateAlleles().contains(truth.getAlternateAllele(0)));
 
         return sameRefAllele && containsAltAllele;
     }
@@ -304,7 +248,21 @@ public class Concordance extends AbstractConcordanceWalker {
         return vc -> !vc.isFiltered() && ! vc.isSymbolicOrSV();
     }
 
-    private VariantContext annotateWithConcordanceState(final VariantContext vc, final ConcordanceState state) {
+    protected VariantContext annotateWithConcordanceState(final VariantContext vc, final ConcordanceState state) {
         return new VariantContextBuilder(vc).attribute(TRUTH_STATUS_VCF_ATTRIBUTE, state.getAbbreviation()).make();
     }
+
+    // setter's and getter's
+    public VariantContextWriter getTruePositivesAndFalseNegativesVcfWriter() {
+        return truePositivesAndFalseNegativesVcfWriter;
+    }
+
+    public VariantContextWriter getTruePositivesAndFalsePositivesVcfWriter() {
+        return truePositivesAndFalsePositivesVcfWriter;
+    }
+
+    public VariantContextWriter getFilteredTrueNegativesAndFalseNegativesVcfWriter() {
+        return filteredTrueNegativesAndFalseNegativesVcfWriter;
+    }
+
 }

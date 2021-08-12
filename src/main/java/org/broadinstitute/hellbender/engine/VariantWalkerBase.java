@@ -189,7 +189,7 @@ public abstract class VariantWalkerBase extends WalkerBase {
     }
 
     /**
-     * Returns the variant filter (simple or composite) that will be applied to the variants before calling {@link #apply}.
+     * Returns the variant filter (simple or composite) that will be applied to the variants before calling apply().
      * The default implementation filters nothing.
      * Default implementation of {@link #traverse()} calls this method once before iterating
      * over the reads and reuses the filter object to avoid object allocation. Nevertheless, keeping state in filter objects is strongly discouraged.

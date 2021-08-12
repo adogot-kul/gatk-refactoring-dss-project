@@ -3,25 +3,24 @@ package org.broadinstitute.hellbender.tools.walkers;
 import org.broadinstitute.hellbender.CommandLineProgramTest;
 import org.broadinstitute.hellbender.exceptions.UserException;
 import org.broadinstitute.hellbender.testutils.IntegrationTestSpec;
-import org.broadinstitute.hellbender.tools.walkers.variantutils.ValidateVariants;
+import org.broadinstitute.hellbender.tools.walkers.variantutils.ValidationType;
 import org.testng.annotations.Test;
 
-import java.io.File;
 import java.io.IOException;
 import java.util.Collections;
 
-import static org.broadinstitute.hellbender.tools.walkers.variantutils.ValidateVariants.ValidationType.*;
+import static org.broadinstitute.hellbender.tools.walkers.variantutils.ValidationType.*;
 
 public final class ValidateVariantsIntegrationTest extends CommandLineProgramTest {
 
     private static final String MITO_REF = toolsTestDir + "mutect/mito/Homo_sapiens_assembly38.mt_only.fasta";
 
-    public String baseTestString(final boolean sharedFile, final String file, final boolean exclude, final ValidateVariants.ValidationType type) {
+    public String baseTestString(final boolean sharedFile, final String file, final boolean exclude, final ValidationType type) {
 
         return baseTestString(sharedFile, file, exclude, type, null, hg19_chr1_1M_Reference);
     }
 
-    public String baseTestString(boolean sharedFile, String file, boolean exclude, ValidateVariants.ValidationType type, String region, String reference) {
+    public String baseTestString(boolean sharedFile, String file, boolean exclude, ValidationType type, String region, String reference) {
         final String filePath = sharedFile ? file: getToolTestDataDir() + file;
         final String typeArgString = exclude ? " --validation-type-to-exclude " + type.name() : excludeValidationTypesButString(type);
         final String intervals = region == null ? "" : " -L " + region;
@@ -30,18 +29,18 @@ public final class ValidateVariantsIntegrationTest extends CommandLineProgramTes
         return referenceString + intervals + " --variant " + filePath + typeArgString;
     }
 
-    public String baseTestStringWithoutReference(boolean sharedFile, String file, boolean exclude, ValidateVariants.ValidationType type) {
+    public String baseTestStringWithoutReference(boolean sharedFile, String file, boolean exclude, ValidationType type) {
         final String filePath = sharedFile ? file: getToolTestDataDir() + file;
         final String typeArgString = exclude ? " --validation-type-to-exclude " + type.name() : excludeValidationTypesButString(type);
         return " --variant " + filePath + typeArgString;
     }
 
-    private static String excludeValidationTypesButString(ValidateVariants.ValidationType type) {
+    private static String excludeValidationTypesButString(ValidationType type) {
         if (type == null || type.equals(ALL)) {
             return "";
         }
         final StringBuilder sbuilder = new StringBuilder();
-        for (final ValidateVariants.ValidationType t : CONCRETE_TYPES) {
+        for (final ValidationType t : CONCRETE_TYPES) {
             if (t != type) {
                 sbuilder.append(" --validation-type-to-exclude ").append(t.toString());
             }
