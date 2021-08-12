@@ -244,7 +244,6 @@ public final class AnalyzeCovariates extends CommandLineProgram {
         RecalUtils.generatePlots(csvFile,exampleReportFile,plotsFile);
     }
 
-
     /**
      * Returns the plot output file
      * @return might be <code>null</code> if the user has not indicated and output file.
@@ -361,7 +360,7 @@ public final class AnalyzeCovariates extends CommandLineProgram {
         if (csvFile != null)  {
             return csvFile;
         } else {
-            return IOUtils.createTempFile("BAnalyzeCovariates", ".csv");
+            return IOUtils.createTempFile("AnalyzeCovariates", ".csv");
         }
     }
 
